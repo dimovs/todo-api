@@ -36,7 +36,7 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 	mux.HandleFunc("/todos", todosHandler(db))
-	mux.HandleFunc("/todos/", getTodoByIDHandler(db))
+	mux.HandleFunc("/todos/", todosByIDHandler(db))
 
 	fmt.Println("Starting service on http://localhost:8080")
 
@@ -123,7 +123,7 @@ func todosHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-func getTodoByIDHandler(db *sql.DB) http.HandlerFunc {
+func todosByIDHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		idStr := strings.TrimPrefix(r.URL.Path, "/todos/")
 
@@ -133,21 +133,55 @@ func getTodoByIDHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		var todo Todo
-		err = db.QueryRow(
-			`select id, title, completed, created_at from todos where id = $1`,
-			id,
-		).Scan(&todo.ID, &todo.Title, &todo.Completed, &todo.CreatedAt)
-
-		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-			return
-		} else if err != nil {
-			http.Error(w, "Failed to query todo", http.StatusInternalServerError)
-			return
+		switch r.Method {
+		case http.MethodGet:
+			getTodoByID(w, db, id)
+		case http.MethodDelete:
+			deleteTodoByID(w, db, id)
+		default:
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(todo)
 	}
+}
+
+func getTodoByID(w http.ResponseWriter, db *sql.DB, id int) {
+	var todo Todo
+	err := db.QueryRow(
+		`select id, title, completed, created_at from todos where id = $1`,
+		id,
+	).Scan(&todo.ID, &todo.Title, &todo.Completed, &todo.CreatedAt)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, "Failed to query todo", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(todo)
+}
+
+func deleteTodoByID(w http.ResponseWriter, db *sql.DB, id int) {
+	res, err := db.Exec(`delete from todos where id = $1`, id)
+
+	if err != nil {
+		http.Error(w, "Failed to delete todo", http.StatusInternalServerError)
+		return
+	}
+
+	affected, err := res.RowsAffected()
+
+	if err != nil {
+		http.Error(w, "Failed to confirm deletion", http.StatusInternalServerError)
+		return
+	}
+
+	if affected == 0 {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
