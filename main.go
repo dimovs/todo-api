@@ -3,10 +3,13 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 func main() {
@@ -33,6 +36,7 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 	mux.HandleFunc("/todos", todosHandler(db))
+	mux.HandleFunc("/todos/", getTodoByIDHandler(db))
 
 	fmt.Println("Starting service on http://localhost:8080")
 
@@ -116,5 +120,34 @@ func todosHandler(db *sql.DB) http.HandlerFunc {
 		default:
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		}
+	}
+}
+
+func getTodoByIDHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		idStr := strings.TrimPrefix(r.URL.Path, "/todos/")
+
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+
+		var todo Todo
+		err = db.QueryRow(
+			`select id, title, completed, created_at from todos where id = $1`,
+			id,
+		).Scan(&todo.ID, &todo.Title, &todo.Completed, &todo.CreatedAt)
+
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		} else if err != nil {
+			http.Error(w, "Failed to query todo", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(todo)
 	}
 }
