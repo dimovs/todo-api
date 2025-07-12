@@ -27,12 +27,13 @@ func main() {
 	// http server
 	mux := http.NewServeMux()
 
+	// handlers
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
-
 	mux.HandleFunc("/todos", getTodosHandler(db))
+	mux.HandleFunc("/todos/create", createTodoHandler(db))
 
 	fmt.Println("Starting service on http://localhost:8080")
 
@@ -73,5 +74,39 @@ func getTodosHandler(db *sql.DB) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 
 		json.NewEncoder(w).Encode(todos)
+	}
+}
+
+func createTodoHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+
+		var input struct {
+			Title string `json:"title"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Title == "" {
+			http.Error(w, "Invalid input", http.StatusBadRequest)
+			return
+		}
+
+		var todo Todo
+
+		err := db.QueryRow(`
+			insert into todos (title) values ($1) returning id, title, completed, created_at`,
+			input.Title,
+		).Scan(&todo.ID, &todo.Title, &todo.Completed, &todo.CreatedAt)
+
+		if err != nil {
+			http.Error(w, "Failed to create a todo", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(todo)
 	}
 }
