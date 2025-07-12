@@ -138,6 +138,8 @@ func todosByIDHandler(db *sql.DB) http.HandlerFunc {
 			getTodoByID(w, db, id)
 		case http.MethodDelete:
 			deleteTodoByID(w, db, id)
+		case http.MethodPut:
+			updateTodoByID(w, r, db, id)
 		default:
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		}
@@ -184,4 +186,54 @@ func deleteTodoByID(w http.ResponseWriter, db *sql.DB, id int) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func updateTodoByID(w http.ResponseWriter, r *http.Request, db *sql.DB, id int) {
+	var input struct {
+		Title     *string `json:"title"`
+		Completed *bool   `json:"completed"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&input)
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if input.Title == nil && input.Completed == nil {
+		http.Error(w, "Nothing to update", http.StatusBadRequest)
+		return
+	}
+
+	query := `update todos set `
+	params := []any{}
+	i := 1
+
+	if input.Title != nil {
+		query += fmt.Sprintf("title = $%d,", i)
+		params = append(params, *input.Title)
+		i++
+	}
+
+	if input.Completed != nil {
+		query += fmt.Sprintf("completed = $%d,", i)
+		params = append(params, *input.Completed)
+		i++
+	}
+
+	query = strings.TrimRight(query, ",") + fmt.Sprintf(" WHERE id = $%d RETURNING id, title, completed, created_at", i)
+	params = append(params, id)
+
+	var todo Todo
+	err = db.QueryRow(query, params...).Scan(&todo.ID, &todo.Title, &todo.Completed, &todo.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "Todo not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, "Failed to update todo", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(todo)
 }
