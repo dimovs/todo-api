@@ -1,30 +1,22 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
+	database "todo-api/db"
 	"todo-api/handlers"
 )
 
 func main() {
-	// database
 	dsn := "postgres://dimovs@localhost:5432/tododb?sslmode=disable"
 
-	db, err := sql.Open("postgres", dsn)
+	db, err := database.Connect(dsn)
 	if err != nil {
 		log.Fatalf("Failed to open DB: %w", err)
 	}
 
-	if err = db.Ping(); err != nil {
-		log.Fatalf("DB is unreachable: %w", err)
-	}
-
-	fmt.Println("Connected to PostgreSQL")
-
-	// http server
 	mux := http.NewServeMux()
 
 	// handlers
