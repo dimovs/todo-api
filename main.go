@@ -5,12 +5,16 @@ import (
 	_ "github.com/lib/pq"
 	"log"
 	"net/http"
+	"os"
 	database "todo-api/db"
 	"todo-api/handlers"
 )
 
 func main() {
-	dsn := "postgres://dimovs@localhost:5432/tododb?sslmode=disable"
+	dsn := os.Getenv("DB_DSN")
+	if dsn == "" {
+		log.Fatal("DB_DSN environment variable not set")
+	}
 
 	db, err := database.Connect(dsn)
 	if err != nil {
