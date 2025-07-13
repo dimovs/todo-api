@@ -31,10 +31,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// handlers
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	})
+	mux.HandleFunc("/health", getHealth)
 	mux.HandleFunc("/todos", todosHandler(db))
 	mux.HandleFunc("/todos/", todosByIDHandler(db))
 
@@ -51,6 +48,14 @@ type Todo struct {
 	Title     string `json:"title"`
 	Completed bool   `json:"completed"`
 	CreatedAt string `json:"created_at"`
+}
+
+func getHealth(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, err := w.Write([]byte("OK"))
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	}
 }
 
 func getTodos(w http.ResponseWriter, db *sql.DB) {
