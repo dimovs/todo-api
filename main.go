@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"todo-api/models"
 )
 
 func main() {
@@ -43,13 +44,6 @@ func main() {
 	}
 }
 
-type Todo struct {
-	ID        int    `json:"id"`
-	Title     string `json:"title"`
-	Completed bool   `json:"completed"`
-	CreatedAt string `json:"created_at"`
-}
-
 func getHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, err := w.Write([]byte("OK"))
@@ -59,7 +53,7 @@ func getHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func getTodos(w http.ResponseWriter, db *sql.DB) {
-	rows, err := db.Query("select id, title, completed, created_at from todos order by id")
+	rows, err := db.Query("select id, title, completed, created_at from tododb.public.todos order by id")
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -67,9 +61,9 @@ func getTodos(w http.ResponseWriter, db *sql.DB) {
 
 	defer rows.Close()
 
-	todos := []Todo{}
+	todos := []models.Todo{}
 	for rows.Next() {
-		var todo Todo
+		var todo models.Todo
 		err := rows.Scan(&todo.ID, &todo.Title, &todo.Completed, &todo.CreatedAt)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -98,10 +92,10 @@ func createTodo(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
-	var todo Todo
+	var todo models.Todo
 
 	err := db.QueryRow(`
-			insert into todos (title) values ($1) returning id, title, completed, created_at`,
+			insert into tododb.public.todos (title) values ($1) returning id, title, completed, created_at`,
 		input.Title,
 	).Scan(&todo.ID, &todo.Title, &todo.Completed, &todo.CreatedAt)
 
@@ -152,9 +146,9 @@ func todosByIDHandler(db *sql.DB) http.HandlerFunc {
 }
 
 func getTodoByID(w http.ResponseWriter, db *sql.DB, id int) {
-	var todo Todo
+	var todo models.Todo
 	err := db.QueryRow(
-		`select id, title, completed, created_at from todos where id = $1`,
+		`select id, title, completed, created_at from tododb.public.todos where id = $1`,
 		id,
 	).Scan(&todo.ID, &todo.Title, &todo.Completed, &todo.CreatedAt)
 
@@ -171,7 +165,7 @@ func getTodoByID(w http.ResponseWriter, db *sql.DB, id int) {
 }
 
 func deleteTodoByID(w http.ResponseWriter, db *sql.DB, id int) {
-	res, err := db.Exec(`delete from todos where id = $1`, id)
+	res, err := db.Exec(`delete from tododb.public.todos where id = $1`, id)
 
 	if err != nil {
 		http.Error(w, "Failed to delete todo", http.StatusInternalServerError)
@@ -210,7 +204,7 @@ func updateTodoByID(w http.ResponseWriter, r *http.Request, db *sql.DB, id int) 
 		return
 	}
 
-	query := `update todos set `
+	query := `update tododb.public.todos set `
 	params := []any{}
 	i := 1
 
@@ -229,7 +223,7 @@ func updateTodoByID(w http.ResponseWriter, r *http.Request, db *sql.DB, id int) 
 	query = strings.TrimRight(query, ",") + fmt.Sprintf(" WHERE id = $%d RETURNING id, title, completed, created_at", i)
 	params = append(params, id)
 
-	var todo Todo
+	var todo models.Todo
 	err = db.QueryRow(query, params...).Scan(&todo.ID, &todo.Title, &todo.Completed, &todo.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "Todo not found", http.StatusNotFound)
