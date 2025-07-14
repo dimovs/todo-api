@@ -16,7 +16,5 @@ func Connect(dsn string) (*sql.DB, error) {
 		return nil, fmt.Errorf("ping db: %w", err)
 	}
 
-	sql.Open("postgres", dsn)
-
 	return db, nil
 }
